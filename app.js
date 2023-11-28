@@ -34,10 +34,17 @@ const userSchema = new mongoose.Schema({
     facebookId: String
 })
 
+const secretSchema = new mongoose.Schema({
+    googleId: String,
+    secret: String
+})
+
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
 const User = new mongoose.model('User', userSchema);
+
+const Secret = new mongoose.model('Secret', secretSchema);
 
 passport.use(User.createStrategy());
 
@@ -56,7 +63,7 @@ passport.use(new GoogleStrategy({
     userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
 
     User.findOrCreate({ googleId: profile.id }, function (err, user) {
       return cb(err, user);
@@ -70,7 +77,7 @@ passport.use(new FacebookStrategy({
     callbackURL: "http://localhost:3000/auth/facebook/secrets"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
 
     User.findOrCreate({ facebookId: profile.id }, function (err, user) {
       return cb(err, user);
@@ -112,13 +119,29 @@ app.get("/register", function(req, res) {
     res.render("register");
 })
 
-app.get("/secrets", function(req, res){
+app.get("/secrets", async function(req, res){
     if(req.isAuthenticated()) {
-        res.render("secrets");
+        const userGoogleId = req.user.googleId;
+
+        try {
+            const secrets = await Secret.find({googleId: userGoogleId}).exec();
+            res.render("secrets", { secrets: secrets });
+        } catch (err) {
+            console.error(err);
+            res.redirect("/login");
+        }
     } else {
         res.redirect("/login");
     }
 });
+
+app.get("/submit", function(req, res) {
+    if(req.isAuthenticated()) {
+        res.render("submit");
+    } else {
+        res.redirect("/login");
+    }
+})
 
 app.post("/login", async function(req, res) {
 
@@ -155,6 +178,17 @@ app.post("/register", async function(req, res) {
     });
 
 });
+
+app.post("/submit", function(req, res) {
+
+    const secret = new Secret ({
+        secret: req.body.secret,
+        googleId: req.user.googleId
+    })
+    secret.save();
+    res.redirect("/secrets");
+
+})
 
 app.get("/logout", async function(req, res) {
     req.logout(function(err) {
